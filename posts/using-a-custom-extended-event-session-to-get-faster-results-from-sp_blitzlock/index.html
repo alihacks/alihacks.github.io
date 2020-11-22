@@ -50,7 +50,7 @@
 			<h1 class="post__title">Using a custom Extended Event Session to get faster results from sp_blitzLock</h1>
 			
 		</header><div class="content post__content clearfix">
-			<p>I&rsquo;m pretty new to <code>sp_blitzLock</code> which is a great utility stored procedure that&rsquo;s part of the First Responder Toolkit that makes analyzing deadlocks simpler by parsing out a lot of the information from the XML deadlock reports. Unfortunately, I have noticed that on some servers, runtime of the SP can take quite a while. My analysis has shown that this is not really an issue with <code>sp_blitzLock</code> but rather SQL Server&rsquo;s ability to work with XML.</p>
+			<p>I&rsquo;m pretty new to <a href="https://www.brentozar.com/archive/2017/12/introducing-sp_blitzlock-troubleshooting-sql-server-deadlocks/">sp_blitzLock</a> which is a great utility stored procedure that&rsquo;s part of the <a href="https://github.com/BrentOzarULTD/SQL-Server-First-Responder-Kit">First Responder Kit</a> that makes analyzing deadlocks simpler by parsing out a lot of the information from the XML deadlock reports. Unfortunately, I have noticed that on some servers, runtime of the SP can take quite a while. My analysis has shown that this is not really an issue with <code>sp_blitzLock</code> but rather SQL Server&rsquo;s ability to work with XML.</p>
 <p>When using <code>system_health</code> event session, below is the output:</p>
 <pre><code>Grab the initial set of XML to parse at Nov 22 2020 12:20:01:123PM
 Parse process and input buffer XML Nov 22 2020 12:24:11:360PM

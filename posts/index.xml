@@ -13,7 +13,7 @@
       <pubDate>Sun, 22 Nov 2020 14:26:15 -0500</pubDate>
       
       <guid>http://alihacks.github.io/posts/using-a-custom-extended-event-session-to-get-faster-results-from-sp_blitzlock/</guid>
-      <description>I&amp;rsquo;m pretty new to sp_blitzLock which is a great utility stored procedure that&amp;rsquo;s part of the First Responder Toolkit that makes analyzing deadlocks simpler by parsing out a lot of the information from the XML deadlock reports. Unfortunately, I have noticed that on some servers, runtime of the SP can take quite a while. My analysis has shown that this is not really an issue with sp_blitzLock but rather SQL Server&amp;rsquo;s ability to work with XML.</description>
+      <description>I&amp;rsquo;m pretty new to sp_blitzLock which is a great utility stored procedure that&amp;rsquo;s part of the First Responder Kit that makes analyzing deadlocks simpler by parsing out a lot of the information from the XML deadlock reports. Unfortunately, I have noticed that on some servers, runtime of the SP can take quite a while. My analysis has shown that this is not really an issue with sp_blitzLock but rather SQL Server&amp;rsquo;s ability to work with XML.</description>
     </item>
     
   </channel>
