@@ -8,11 +8,11 @@
     <language>en-us</language>
     <lastBuildDate>Sun, 22 Nov 2020 14:26:15 -0500</lastBuildDate><atom:link href="http://alihacks.github.io/posts/index.xml" rel="self" type="application/rss+xml" />
     <item>
-      <title>Troubleshooting frequent error 17830 messages in system_health</title>
-      <link>http://alihacks.github.io/posts/2020-11-29-troubleshooting-frequent-error-17830-messages-in-system_health/</link>
+      <title>Troubleshooting frequent occurrences of error 17830 in system_health</title>
+      <link>http://alihacks.github.io/posts/2020-11-29-troubleshooting-frequent-occurrences-of-error-17830-in-system_health/</link>
       <pubDate>Sun, 22 Nov 2020 14:26:15 -0500</pubDate>
       
-      <guid>http://alihacks.github.io/posts/2020-11-29-troubleshooting-frequent-error-17830-messages-in-system_health/</guid>
+      <guid>http://alihacks.github.io/posts/2020-11-29-troubleshooting-frequent-occurrences-of-error-17830-in-system_health/</guid>
       <description>While analyzing the system_health on a few SQL Servers, I noticed that error 17830 is logged about 30 times every minute, and this behavior is consistent across a set of servers. After doing some googling, I came across a very detailed writeup about this error on bobsql.com. This post saved me quite a bit of troubleshooting time as it explained the details behind what may cause this error and a potential fix.</description>
     </item>
     

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VV3VSK6QJF"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+    
+      gtag('config', 'G-VV3VSK6QJF');
+    </script>    
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>Troubleshooting frequent occurrences of error 17830 in system_health - Ali&#39;s Blog</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	<link rel="stylesheet" href="/css/custom.css">
+
+	<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="Ali&#39;s Blog" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">Ali&#39;s Blog</div>
+					<div class="logo__tagline">Adventures in Microsoft SQL Server, .NET and other fun things</div>
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Troubleshooting frequent occurrences of error 17830 in system_health</h1>
+			
+		</header><div class="content post__content clearfix">
+			<p>While analyzing the <a href="https://docs.microsoft.com/en-us/sql/relational-databases/extended-events/use-the-system-health-session?view=sql-server-ver15">system_health</a> on a few SQL Servers, I noticed that error 17830 is logged about 30 times every minute, and this behavior is consistent across a set of servers. After doing some googling, I came across <a href="https://bobsql.com/sql-mysteries-why-is-my-sql-server-experiencing-lots-of-17830-tcp-10054-errors/">a very detailed writeup about this error on bobsql.com</a>. This post saved me quite a bit of troubleshooting time as it explained the details behind what may cause this error and a potential fix.</p>
+<p>Before proceeding further, I setup a custom extended event session so I can easily monitor for this error message, and see if I can make it go away.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">CREATE</span> EVENT <span style="color:#66d9ef">SESSION</span> [ali_testing] <span style="color:#66d9ef">ON</span> SERVER 
+<span style="color:#66d9ef">ADD</span> EVENT sqlserver.error_reported(
+    ACTION(
+		sqlserver.client_app_name,
+		sqlserver.client_hostname,
+		sqlserver.context_info,
+		sqlserver.database_id,
+		sqlserver.session_id,
+		sqlserver.sql_text,
+		sqlserver.tsql_stack,
+		sqlserver.username,
+		sqlserver.plan_handle
+	)
+    <span style="color:#66d9ef">WHERE</span> (
+		[error_number] <span style="color:#f92672">=</span> (<span style="color:#ae81ff">17830</span>)
+	)
+)
+<span style="color:#66d9ef">ADD</span> TARGET package0.event_file(<span style="color:#66d9ef">SET</span> filename<span style="color:#f92672">=</span>N<span style="color:#e6db74">&#39;ali_testing&#39;</span>)
+
+<span style="color:#66d9ef">ALTER</span> EVENT <span style="color:#66d9ef">SESSION</span> [ali_testing] <span style="color:#66d9ef">ON</span> SERVER <span style="color:#66d9ef">STATE</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">START</span>
+</code></pre></div><p>With this monitoring in place, I was able to get some details about the clients (they all seemed to be coming from localhost) as well as a pattern in the error message, it was either:
+<code>Network error code 0x2746 occurred while establishing a connection; the connection has been closed. This may have been caused by client or server login timeout expiration. Time spent during login: total 3 ms, enqueued 3 ms, network writes 0 ms, network reads 0 ms, establishing SSL 0 ms, network reads during SSL 0 ms, network writes during SSL 0 ms, secure calls during SSL 0 ms, enqueued during SSL 0 ms, negotiating SSPI 0 ms, network reads during SSPI 0 ms, network writes during SSPI 0 ms, secure calls during SSPI 0 ms, enqueued during SSPI 0 ms, validating login 0 ms, including user-defined login processing 0 ms. [CLIENT: ::1]</code></p>
+<p>Or:
+<code>Network error code 0x2746 occurred while establishing a connection; the connection has been closed. This may have been caused by client or server login timeout expiration. Time spent during login: total 1 ms, enqueued 1 ms, network writes 0 ms, network reads 0 ms, establishing SSL 0 ms, network reads during SSL 0 ms, network writes during SSL 0 ms, secure calls during SSL 0 ms, enqueued during SSL 0 ms, negotiating SSPI 0 ms, network reads during SSPI 0 ms, network writes during SSPI 0 ms, secure calls during SSPI 0 ms, enqueued during SSPI 0 ms, validating login 0 ms, including user-defined login processing 0 ms. [CLIENT: 127.0.0.1]</code></p>
+<p>The the only difference between the repeated 2 messages was the client IP: <code>127.0.0.</code> or <code>::1</code>. Both these IPs are the loopback adapter (aka localhost) with the former being IPv4 and the latter IPv6. At this point, my guess was that a client was using <code>localhost</code> as the server name, and it was resolving to both <code>127.0.0.</code> and <code>::1</code>, trying to connect to both, and dropping the &ldquo;loser&rdquo;. I was not able to get more details from the extended event - probably because a lot of this was happening before authentication took place, however I had narrowed down the search to what is running on the server itself.</p>
+<p>At this point I could have captured all logins and tried to see a pattern, but I took a guess and assumed this is caused by <code>Telegraf Data Collector</code> which we use on all the servers for gathering metrics (for more details on this, please see this <a href="https://tracyboggiano.com/archive/series/collecting-performance-metrics/">set of excellent blog posts by Tracy Boggiano</a> or her <a href="https://github.com/tboggiano/grafana">GitHub repo</a>)</p>
+<p>Sure enough, the connection string it was using turned out to be <code>Server=localhost;Port=1433;app name=telegraf;log=1;</code>. Changing this to use <code>127.0.0.1</code> instead to default to IPv6 as: <code>Server=127.0.0.1;Port=1433;app name=telegraf;log=1;</code> and restarting the service resolved the issue and the regular 17830 errors we no more.</p>
+<p>Once done, I used the following code to clean up my testing XE Session:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">DROP</span> EVENT <span style="color:#66d9ef">SESSION</span> [ali_testing] <span style="color:#66d9ef">ON</span> SERVER 
+</code></pre></div>
+		</div>
+	</article>
+</main>
+
+
+
+<section class="comments">
+	<div id="disqus_thread"></div>
+<script type="application/javascript">
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "alihacks" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</section>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2020 alihacks.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>
