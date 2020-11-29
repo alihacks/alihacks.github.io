@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VV3VSK6QJF"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+    
+      gtag('config', 'G-VV3VSK6QJF');
+    </script>    
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>Using a custom Extended Event Session to get faster results from sp_blitzLock - Ali&#39;s Blog</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	<link rel="stylesheet" href="/css/custom.css">
+
+	<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="Ali&#39;s Blog" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">Ali&#39;s Blog</div>
+					<div class="logo__tagline">Adventures in Microsoft SQL Server, .NET and other fun things</div>
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Using a custom Extended Event Session to get faster results from sp_blitzLock</h1>
+			
+		</header><div class="content post__content clearfix">
+			<p>I&rsquo;m pretty new to <a href="https://www.brentozar.com/archive/2017/12/introducing-sp_blitzlock-troubleshooting-sql-server-deadlocks/">sp_blitzLock</a> which is a great utility stored procedure that&rsquo;s part of the <a href="https://github.com/BrentOzarULTD/SQL-Server-First-Responder-Kit">First Responder Kit</a> that makes analyzing deadlocks simpler by parsing out a lot of the information from the XML deadlock reports. Unfortunately, I have noticed that on some servers, runtime of the SP can take quite a while. My analysis has shown that this is not really an issue with <code>sp_blitzLock</code> but rather SQL Server&rsquo;s ability to work with XML.</p>
+<p>When using <code>system_health</code> event session, below is the output:</p>
+<pre><code>Grab the initial set of XML to parse at Nov 22 2020 12:20:01:123PM
+Parse process and input buffer XML Nov 22 2020 12:24:11:360PM
+</code></pre><p>You can see that almost 4 minutes is spent grabbing the xml from the. This is because <code>sp_blitzLock</code> is going through the entire set of files and trying to filter for <code>xml_deadlock_report</code> records which involves parsing all the XML and filtering which is not something SQL Server is terribly good at.</p>
+<p>Exploring further, based on the query used in <code>sp_blitzLock</code> we see that the  <code>system_health</code> files on this system have quite a bit of data:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">SELECT</span> <span style="color:#66d9ef">COUNT</span>(<span style="color:#f92672">*</span>) <span style="color:#66d9ef">as</span> num_records, <span style="color:#66d9ef">SUM</span>(DATALENGTH(event_data)) <span style="color:#66d9ef">AS</span> total_bytes
+<span style="color:#66d9ef">FROM</span>   sys.fn_xe_file_target_read_file(<span style="color:#e6db74">&#39;system_health*.xel&#39;</span>, <span style="color:#66d9ef">NULL</span>, <span style="color:#66d9ef">NULL</span>, <span style="color:#66d9ef">NULL</span>)
+</code></pre></div><p><img src="/images/20201122_xefilesize.png" alt="query results"></p>
+<p>That is 819,712 rows totalling 3,812,607,108, that&rsquo;s almost 4GB of data we need to sort through.</p>
+<p>One way to deal with this is to create a custom event session that only records deadlocks which will make it easier to parse through and get the same information we&rsquo;re looking for. To test this theory, I created the following:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">CREATE</span> EVENT <span style="color:#66d9ef">SESSION</span> [deadlocks] <span style="color:#66d9ef">ON</span> SERVER 
+<span style="color:#66d9ef">ADD</span> EVENT sqlserver.xml_deadlock_report
+<span style="color:#66d9ef">ADD</span> TARGET package0.event_file(<span style="color:#66d9ef">SET</span> filename<span style="color:#f92672">=</span>N<span style="color:#e6db74">&#39;deadlocks&#39;</span>,max_file_size<span style="color:#f92672">=</span>(<span style="color:#ae81ff">100</span>),max_rollover_files<span style="color:#f92672">=</span>(<span style="color:#ae81ff">3</span>))
+<span style="color:#66d9ef">WITH</span> (STARTUP_STATE<span style="color:#f92672">=</span><span style="color:#66d9ef">ON</span>)
+</code></pre></div><p>This will create a set of <code>xel</code> files that start with the prefix <code>deadlocks</code> that are up to 100MB each and up to a maximum of 3 files. Unlike <code>system_health</code>, these will only contain deadlocks - the information we&rsquo;re actually looking for. You may want to tune the file size and number of files based on your requirement of how much deadlock history you want to keep around. After making this change and waiting a while so we can get some deadlocks (or alternatively we can create a whole bunch), we can now run <code>sp_blitzLock</code> and use the parameter <code>@EventSessionPath</code> to tell it to use our files instead:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">exec</span> sp_blitzlock <span style="color:#f92672">@</span>EventSessionPath <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;deadlocks*.xel&#39;</span>
+</code></pre></div><p>And the entire execution takes about 5 seconds, more importantly, the parsing of XML (in this instance for the same number of deadlocks since this change has been on this server for about 10 days) takes a mere ~3 seconds:</p>
+<pre><code>Grab the initial set of XML to parse at Nov 22 2020  12:39:36:017PM
+Parse process and input buffer XML Nov 22 2020  12:39:36:100PM
+</code></pre><p>Running the same query to see the size of data in the <code>xel</code> files returns 20 rows totaling 258,598 bytes - quite a difference. Going forward, I plan on setting up this extended event session on a few other severs where deadlocks are common and developers need to troubleshoot them.</p>
+
+		</div>
+	</article>
+</main>
+
+
+
+<section class="comments">
+	<div id="disqus_thread"></div>
+<script type="application/javascript">
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "alihacks" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</section>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2020 alihacks.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>
