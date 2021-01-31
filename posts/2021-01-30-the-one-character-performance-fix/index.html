@@ -54,7 +54,7 @@
 <p>We&rsquo;re going to demonstrate the impact of parameter data types on performance. For this scenario we will create a 1 table database that contains user sessions. During typical use, we&rsquo;d have 1 row per active session in this table and inactive sessions are cleared on a schedule. We will use a <code>session_cookie</code> column to store the unique cookie that identifies a session, then on every time we need to check if a session is valid, we will use a query to check for this. The code below creates a table and simulates 50,000 active sessions.</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">DROP</span> <span style="color:#66d9ef">TABLE</span> <span style="color:#66d9ef">IF</span> <span style="color:#66d9ef">EXISTS</span> dbo.sessions
 <span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">TABLE</span> dbo.sessions(
-	id NUMERIC(<span style="color:#ae81ff">18</span>, <span style="color:#ae81ff">0</span>) <span style="color:#66d9ef">IDENTITY</span>(<span style="color:#ae81ff">1</span>,<span style="color:#ae81ff">1</span>) <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,
+	id BIGINT <span style="color:#66d9ef">IDENTITY</span>(<span style="color:#ae81ff">1</span>,<span style="color:#ae81ff">1</span>) <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,
 	session_cookie VARCHAR(<span style="color:#ae81ff">32</span>) <span style="color:#66d9ef">NULL</span>,
 	ts DATETIME <span style="color:#66d9ef">NULL</span>
 	<span style="color:#66d9ef">INDEX</span> IX1(session_cookie)
