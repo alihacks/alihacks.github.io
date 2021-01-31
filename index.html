@@ -50,6 +50,19 @@
 	<article class="list__item post">
 	<header class="list__header">
 		<h2 class="list__title post__title">
+			<a href="/posts/2021-01-30-the-one-character-performance-fix/" rel="bookmark">
+			The one characater performance fix
+			</a>
+		</h2>
+		
+	</header>
+	<div class="content list__excerpt post__content clearfix">
+		Note: This writeup is based on a production issue that I encountered for a vendor app. I used what I learned from the experience to write up an independent demo to show the potential impact this problem can have on a production system.
+We&rsquo;re going to demonstrate the impact of parameter data types on performance. For this scenario we will create a 1 table database that contains user sessions. During typical use, we&rsquo;d have 1 row per active session in this table and inactive sessions are cleared on a schedule.
+	</div>
+</article><article class="list__item post">
+	<header class="list__header">
+		<h2 class="list__title post__title">
 			<a href="/posts/2020-11-29-troubleshooting-frequent-occurrences-of-error-17830-in-system_health/" rel="bookmark">
 			Troubleshooting frequent occurrences of error 17830 in system_health
 			</a>
@@ -89,6 +102,7 @@
 	<h4 class="widget__title">Recent Posts</h4>
 	<div class="widget__content">
 		<ul class="widget__list">
+			<li class="widget__item"><a class="widget__link" href="/posts/2021-01-30-the-one-character-performance-fix/">The one characater performance fix</a></li>
 			<li class="widget__item"><a class="widget__link" href="/posts/2020-11-29-troubleshooting-frequent-occurrences-of-error-17830-in-system_health/">Troubleshooting frequent occurrences of error 17830 in system_health</a></li>
 			<li class="widget__item"><a class="widget__link" href="/posts/2020-11-22-using-a-custom-extended-event-session-to-get-faster-results-from-sp_blitzlock/">Using a custom Extended Event Session to get faster results from sp_blitzLock</a></li>
 		</ul>
@@ -113,7 +127,7 @@
 	<div class="container footer__container flex">
 		
 		<div class="footer__copyright">
-			&copy; 2020 alihacks.
+			&copy; 2021 alihacks.
 			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
 		</div>
 	</div>

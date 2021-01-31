@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VV3VSK6QJF"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+    
+      gtag('config', 'G-VV3VSK6QJF');
+    </script>    
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>The one characater performance fix - Ali&#39;s Blog</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+
+	<link rel="stylesheet" href="/css/style.css">
+	<link rel="stylesheet" href="/css/custom.css">
+
+	<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container header__container">
+		
+	<div class="logo">
+		<a class="logo__link" href="/" title="Ali&#39;s Blog" rel="home">
+			<div class="logo__item logo__text">
+					<div class="logo__title">Ali&#39;s Blog</div>
+					<div class="logo__tagline">Adventures in Microsoft SQL Server, .NET and other fun things</div>
+				</div>
+		</a>
+	</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">The one characater performance fix</h1>
+			
+		</header><div class="content post__content clearfix">
+			<p><em>Note: This writeup is based on a production issue that I encountered for a vendor app. I used what I learned from the experience to write up an independent demo to show the potential impact this problem can have on a production system.</em></p>
+<p>We&rsquo;re going to demonstrate the impact of parameter data types on performance. For this scenario we will create a 1 table database that contains user sessions. During typical use, we&rsquo;d have 1 row per active session in this table and inactive sessions are cleared on a schedule. We will use a <code>session_cookie</code> column to store the unique cookie that identifies a session, then on every time we need to check if a session is valid, we will use a query to check for this. The code below creates a table and simulates 50,000 active sessions.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">DROP</span> <span style="color:#66d9ef">TABLE</span> <span style="color:#66d9ef">IF</span> <span style="color:#66d9ef">EXISTS</span> dbo.sessions
+<span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">TABLE</span> dbo.sessions(
+	id NUMERIC(<span style="color:#ae81ff">18</span>, <span style="color:#ae81ff">0</span>) <span style="color:#66d9ef">IDENTITY</span>(<span style="color:#ae81ff">1</span>,<span style="color:#ae81ff">1</span>) <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,
+	session_cookie VARCHAR(<span style="color:#ae81ff">32</span>) <span style="color:#66d9ef">NULL</span>,
+	ts DATETIME <span style="color:#66d9ef">NULL</span>
+	<span style="color:#66d9ef">INDEX</span> IX1(session_cookie)
+)
+
+<span style="color:#66d9ef">DECLARE</span>	<span style="color:#f92672">@</span>i int <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
+<span style="color:#66d9ef">SET</span> NOCOUNT <span style="color:#66d9ef">ON</span>
+WHILE <span style="color:#f92672">@</span>i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">50000</span> <span style="color:#66d9ef">BEGIN</span>
+	<span style="color:#66d9ef">SELECT</span> <span style="color:#f92672">@</span>i <span style="color:#f92672">=</span> <span style="color:#f92672">@</span>i <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>
+	<span style="color:#66d9ef">INSERT</span> <span style="color:#66d9ef">INTO</span> [dbo].[sessions] (ts, session_cookie)
+    <span style="color:#66d9ef">VALUES</span> (GETDATE(), <span style="color:#66d9ef">REPLACE</span>(<span style="color:#66d9ef">CAST</span>(NEWID() <span style="color:#66d9ef">AS</span> VARCHAR(<span style="color:#ae81ff">64</span>)), <span style="color:#e6db74">&#39;-&#39;</span>,<span style="color:#e6db74">&#39;&#39;</span>)
+	)
+<span style="color:#66d9ef">END</span>
+</code></pre></div><p>In our scenario, our application uses a parameterized query (likely product of an ORM) to check for sessions as below:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">DECLARE</span> <span style="color:#f92672">@</span>p1 NVARCHAR(<span style="color:#ae81ff">4000</span>) <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;mycookievalue&#39;</span>
+<span style="color:#66d9ef">SELECT</span> id, ts <span style="color:#66d9ef">FROM</span> sessions <span style="color:#66d9ef">WHERE</span>  ( session_cookie <span style="color:#f92672">=</span>  <span style="color:#f92672">@</span>p1  )  
+</code></pre></div><p>At a first glance, you may think this is a pretty OK query given the parameterization as well as the existence of an index on the session_cookie column we are filtering for. But when we look at the execution plan, it&rsquo;s quite disappointing (400 logical reads):</p>
+<p><img src="/images/20210131_original_plan.png" alt="execution plan"></p>
+<p>The little exclamation point is trying to tell us why this is happening, specifically <code>Type conversion in expression CONVERT_IMPLICIT(nvarchar(32),[sample].[dbo].[sessions].[session_cookie],0)=[@p1] may affect &quot;seek plan&quot; in query plan choice</code>. What this is telling us is, the data type of our column is VARCHAR but the parameter we&rsquo;re passing is a NVARCHAR and SQL Server is not able to use the index that&rsquo;s in place and is instead casting every value in the column while scanning the entire table to see if there is a match. Now let&rsquo;s take this advice and fix our query by removing the extra &ldquo;N&rdquo;:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">DECLARE</span> <span style="color:#f92672">@</span>p1 VARCHAR(<span style="color:#ae81ff">4000</span>) <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;mycookievalue&#39;</span>
+<span style="color:#66d9ef">SELECT</span> id, ts <span style="color:#66d9ef">FROM</span> sessions <span style="color:#66d9ef">WHERE</span>  ( session_cookie <span style="color:#f92672">=</span>  <span style="color:#f92672">@</span>p1  )  
+</code></pre></div><p>And we&rsquo;re now getting a much better plan (3 logical reads):</p>
+<p><img src="/images/20210131_second_plan.png" alt="execution plan"></p>
+<p>To put this in perspective - in our case this was the difference between 100% CPU vs 10% CPU on an otherwise quite busy system (storing sessions is a minor functionality for this application). Let&rsquo;s demonstrate that with a quick Python script:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#f92672">import</span> pyodbc
+<span style="color:#f92672">import</span> concurrent.futures
+<span style="color:#f92672">import</span> time
+
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run_query</span>(cnt):
+    query <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;&#34; DECLARE @p1 NVARCHAR(4000) = &#39;mycookievalue&#39;
+</span><span style="color:#e6db74">    SELECT id FROM sessions WHERE  ( session_cookie = @p1  )  &#34;&#34;&#34;</span>
+    connection_string <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;Driver={ODBC Driver 17 for SQL Server};Server=tcp:myserver,1433;Database=sample;Uid=myuser;Pwd=mypw&#39;</span>
+    conn <span style="color:#f92672">=</span> pyodbc<span style="color:#f92672">.</span>connect(connection_string)
+    cursor <span style="color:#f92672">=</span> conn<span style="color:#f92672">.</span>cursor()
+    start_time <span style="color:#f92672">=</span> time<span style="color:#f92672">.</span>time()
+
+    <span style="color:#66d9ef">for</span> i <span style="color:#f92672">in</span> range(cnt):
+        cursor<span style="color:#f92672">.</span>execute(query)
+    conn<span style="color:#f92672">.</span>close()
+    <span style="color:#66d9ef">return</span> time<span style="color:#f92672">.</span>time() <span style="color:#f92672">-</span> start_time
+
+
+<span style="color:#66d9ef">if</span> __name__ <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;__main__&#34;</span>:
+    thread_count <span style="color:#f92672">=</span> <span style="color:#ae81ff">25</span>
+    run_count <span style="color:#f92672">=</span> <span style="color:#ae81ff">500</span>
+
+    <span style="color:#66d9ef">with</span> concurrent<span style="color:#f92672">.</span>futures<span style="color:#f92672">.</span>ThreadPoolExecutor(max_workers<span style="color:#f92672">=</span>thread_count) <span style="color:#66d9ef">as</span> executor:
+        futures <span style="color:#f92672">=</span> [executor<span style="color:#f92672">.</span>submit(run_query, run_count)
+                   <span style="color:#66d9ef">for</span> _ <span style="color:#f92672">in</span> range(thread_count)]
+    results <span style="color:#f92672">=</span> [f<span style="color:#f92672">.</span>result() <span style="color:#66d9ef">for</span> f <span style="color:#f92672">in</span> futures]
+    runtime <span style="color:#f92672">=</span> sum(results)
+
+    <span style="color:#66d9ef">print</span>(
+        f<span style="color:#e6db74">&#34;Completed {thread_count} threads with {run_count} queries each, total time: {runtime:.4f}s&#34;</span>)
+
+</code></pre></div><p>This script creates 25 threads to run this query 500 times each. This is not an unrealistic scenario, if anything in a real world scenario there would be more concurrent requests as every page load in this application needs this data. Running this test with the original code on a respectable 8 core server doing nothing else yields this:</p>
+<p><img src="/images/20210131_test1.png" alt="cpu during test 1"></p>
+<pre><code>&gt; python .\sqltest.py
+Completed 25 threads with 500 queries each, total time: 678.3122s
+</code></pre><p>When we report this issue, the vendors knee-jerk response is usually that we need to rebuild our indexes (failing to acknowledge that this is indeed a design flaw) So let&rsquo;s do that to demonstrate how that changes things.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">ALTER</span> <span style="color:#66d9ef">INDEX</span> <span style="color:#66d9ef">ALL</span> <span style="color:#66d9ef">ON</span> sessions REBUILD
+<span style="color:#66d9ef">EXEC</span> sp_updatestats
+</code></pre></div><p>And now we get</p>
+<p><img src="/images/20210131_test2.png" alt="cpu during test 2"></p>
+<pre><code>&gt; python .\sqltest.py
+Completed 25 threads with 500 queries each, total time: 521.9987s
+</code></pre><p>There is definitely some improvement (confirmed over multiple runs) if we rebuild the index after the inserts. But we&rsquo;re still pegging the CPU with 25 threads. Now let&rsquo;s apply our one character fix by running the same Python script but replacing <code>NVARCHAR(4000)</code> with <code>VARCHAR(4000)</code> to see what this gives us. (The database and table was rebuilt for this run, <em>without</em> doing any index rebuilds - so same setup as test 1)</p>
+<p><img src="/images/20210131_test3.png" alt="cpu during test 3"></p>
+<pre><code>&gt; python .\sqltest.py
+Completed 25 threads with 500 queries each, total time: 47.4932s
+</code></pre><p>This is a great example on how important it is to use correct data types for parameters - especially in frequently executed critical queries. I&rsquo;ve run into this situation in other scenarios where tables where created using <code>VARCHAR</code> columns and the ORM (Spring/Boot for example) default to NVARCHAR since the strings in the language are Unicode by default. In this case it may be best to use <code>NVARCHAR</code> in SQL - especially if you can get Unicode input but a quick fix can be to tell your driver that your strings in SQL Server are not Unicode by using a connection string parameter like <code>sendStringParametersAsUnicode=false</code> for jTDS. This is only a good idea if you don&rsquo;t use <code>NVARCHAR</code> at all and is a quick fix/workaround, <a href="http://jtds.sourceforge.net/faq.html">documentation for jTDS can be found here</a></p>
+
+		</div>
+	</article>
+</main>
+
+
+
+<section class="comments">
+	<div id="disqus_thread"></div>
+<script type="application/javascript">
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "alihacks" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</section>
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2021 alihacks.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>

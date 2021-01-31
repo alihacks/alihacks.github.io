@@ -8,6 +8,16 @@
     <language>en-us</language>
     <lastBuildDate>Sun, 22 Nov 2020 14:26:15 -0500</lastBuildDate><atom:link href="http://alihacks.github.io/posts/index.xml" rel="self" type="application/rss+xml" />
     <item>
+      <title>The one characater performance fix</title>
+      <link>http://alihacks.github.io/posts/2021-01-30-the-one-character-performance-fix/</link>
+      <pubDate>Sun, 22 Nov 2020 14:26:15 -0500</pubDate>
+      
+      <guid>http://alihacks.github.io/posts/2021-01-30-the-one-character-performance-fix/</guid>
+      <description>Note: This writeup is based on a production issue that I encountered for a vendor app. I used what I learned from the experience to write up an independent demo to show the potential impact this problem can have on a production system.
+We&amp;rsquo;re going to demonstrate the impact of parameter data types on performance. For this scenario we will create a 1 table database that contains user sessions. During typical use, we&amp;rsquo;d have 1 row per active session in this table and inactive sessions are cleared on a schedule.</description>
+    </item>
+    
+    <item>
       <title>Troubleshooting frequent occurrences of error 17830 in system_health</title>
       <link>http://alihacks.github.io/posts/2020-11-29-troubleshooting-frequent-occurrences-of-error-17830-in-system_health/</link>
       <pubDate>Sun, 22 Nov 2020 14:26:15 -0500</pubDate>
